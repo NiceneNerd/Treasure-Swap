@@ -49,7 +49,7 @@ def build_gfx(obj: oead.byml.Hash, be: bool):
         else:
             assert settings["dlc_dir_nx"]
             stock_dir = Path(settings["dlc_dir_nx"])
-    except ImportError:
+    except AssertionError:
         messagebox.showerror(
             "Error", "BCML with DLC support is required to build a standalone mod"
         )

@@ -1,13 +1,15 @@
 import sys
 import os
 from base64 import urlsafe_b64encode
-from json import dumps
+from json import dumps, loads
 from pathlib import Path
+from platform import system
 from shutil import rmtree
 from tempfile import TemporaryDirectory
 from tkinter import *
-from tkinter import messagebox, filedialog
+from tkinter import messagebox, filedialog, font
 from tkinter.ttk import *
+from webbrowser import open_new_tab
 
 import oead
 import py7zr
@@ -32,31 +34,31 @@ def load_db():
 
 def build_gfx(obj: oead.byml.Hash, be: bool):
     unit = tuple(obj["unit"].split("_"))
+    stock_dir: Path
     try:
-        from bcml import util
-        from bcml.mergers import mubin
+        set_path = (
+            Path(os.path.expandvars("%LOCALAPPDATA%")) / "bcml" / "settings.json"
+            if system() == "Windows"
+            else Path.home() / ".config" / "bcml"
+        )
+        assert set_path.exists()
+        settings = loads(set_path.read_text("utf-8"))
+        if be:
+            assert settings["dlc_dir"]
+            stock_dir = Path(settings["dlc_dir"])
+        else:
+            assert settings["dlc_dir_nx"]
+            stock_dir = Path(settings["dlc_dir_nx"])
     except ImportError:
-        messagebox.showerror("Error", "BCML is required to build a standalone mod")
-        return
-    try:
-        assert util.get_settings("wiiu") == be
-    except AssertionError:
-        plat_map = {True: "Wii U", False: "Switch"}
         messagebox.showerror(
-            "Error",
-            f"Cannot generate {plat_map[be]} mod when "
-            f"BCML is in {plat_map[util.get_settings('wiiu')]} mode",
+            "Error", "BCML with DLC support is required to build a standalone mod"
         )
         return
-    out_dir = Path(filedialog.askdirectory(title="Select Mod Folder"))
-    out: Path = (
-        out_dir
-        / Path(util.get_dlc_path() + ("/0010" if be else ""))
-        / "Map"
-        / "MainField"
-        / unit[0]
-        / f"{obj['unit']}.smubin"
+    out_dir = Path(filedialog.askdirectory(title="Select Mod Folder")) / (
+        "aoc/0010" if be else "01007EF00011F001/romfs"
     )
+    map_path = Path("Map") / "MainField" / unit[0] / f"{obj['unit']}.smubin"
+    out: Path = out_dir / map_path
     mu: oead.byml.Hash
     if out.exists():
         res = messagebox.askyesno(
@@ -68,7 +70,9 @@ def build_gfx(obj: oead.byml.Hash, be: bool):
             return
         mu = oead.byml.from_binary(oead.yaz0.decompress(out.read_bytes()))
     else:
-        mu = mubin.get_stock_map(unit, False)
+        mu = oead.byml.from_binary(
+            oead.yaz0.decompress((stock_dir / map_path).read_bytes())
+        )
     # Binary search
     a = 0
     b = len(mu["Objs"]) - 1
@@ -89,6 +93,9 @@ def build_gfx(obj: oead.byml.Hash, be: bool):
         )
         return
     out.parent.mkdir(parents=True, exist_ok=True)
+    out_pack = out_dir / "Pack" / "AocMainField.pack"
+    out_pack.parent.mkdir(parents=True, exist_ok=True)
+    out_pack.write_bytes(b"")
     out.write_bytes(oead.yaz0.compress(oead.byml.to_binary(mu, be)))
     messagebox.showinfo("Done", "Mod created succesfully!")
 
@@ -143,9 +150,17 @@ def main():
         " and the name of the actor you want to place in the chest.",
         justify=LEFT,
         wraplength=260 - 24,
-    ).pack(padx=12, pady=8, anchor="w")
-
-    Label(frame, text="Treasure Box Hash ID").pack(padx=12, pady=0, anchor="w")
+    ).pack(padx=12, pady=(8, 0), anchor="w")
+    lnk_obj = Label(
+        frame,
+        text="BOTW Object Map on ZeldaMods",
+        foreground="blue",
+        cursor="hand2",
+        font=font.Font(underline=True, size=9),
+    )
+    lnk_obj.pack(padx=12, pady=4, anchor="w")
+    lnk_obj.bind("<Button-1>", lambda _: open_new_tab("https://objmap.zeldamods.org/"))
+    Label(frame, text="Treasure Box Hash ID").pack(padx=12, pady=4, anchor="w")
     hash_id = StringVar()
     Entry(frame, textvariable=hash_id).pack(padx=12, pady=4, anchor="w", fill="x")
     actor_name = StringVar()
@@ -199,10 +214,23 @@ def main():
             build_bnp(window, obj, be=wiiu_var.get())
         else:
             build_gfx(obj, be=wiiu_var.get())
+        actor_name.set("")
+        hash_id.set("")
+        bnp_mod.set(False)
+        wiiu_var.set(False)
 
     Button(frame, text="Create", command=create).pack(padx=12, pady=8, anchor="e")
 
-    window.title("Treasure Swap for BOTW")
+    window.title("Treasure Swap")
+    window.iconphoto(
+        False,
+        PhotoImage(
+            file=os.path.join(
+                getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__))),
+                "tswap.png",
+            )
+        ),
+    )
     window.configure(bg="white")
     window.resizable(False, False)
     window.mainloop()

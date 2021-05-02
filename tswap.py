@@ -118,6 +118,13 @@ def build_bnp(parent, obj: oead.byml.Hash, be: bool):
                                     "add": oead.byml.Hash(),
                                     "del": oead.byml.Array(),
                                 }
+                            ),
+                            "Rails": oead.byml.Hash(
+                                {
+                                    "mod": oead.byml.Hash(),
+                                    "add": oead.byml.Hash(),
+                                    "del": oead.byml.Array()
+                                }
                             )
                         }
                     )
